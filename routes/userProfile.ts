@@ -8,6 +8,9 @@ import { AllHtmlEntities as Entities } from 'html-entities'
 import config from 'config'
 import fs from 'node:fs/promises'
 
+// @ts-expect-error FIXME due to non-existing type definitions for notevil
+import { eval as safeEval } from 'notevil'
+
 import * as challengeUtils from '../lib/challengeUtils'
 import { themes } from '../views/themes/themes'
 import { challenges } from '../data/datacache'
@@ -16,6 +19,61 @@ import { UserModel } from '../models/user'
 import * as utils from '../lib/utils'
 
 const entities = new Entities()
+
+function isSafeCode (code: string): boolean {
+  const forbiddenPatterns = [
+    /process/i,
+    /require/i,
+    /global/i,
+    /window/i,
+    /document/i,
+    /constructor/i,
+    /prototype/i,
+    /__proto__/i,
+    /import/i,
+    /exec/i,
+    /spawn/i,
+    /child_process/i,
+    /Function/i,
+    /eval/i,
+    /mainModule/i,
+    /fs/i,
+    /path/i,
+    /os/i,
+    /apply/i,
+    /call/i,
+    /bind/i,
+    /getPrototypeOf/i,
+    /getOwnProperty/i,
+    /defineProperty/i,
+    /defineProperties/i,
+    /__define/i,
+    /lookup/i,
+    /callee/i,
+    /caller/i,
+    /arguments/i,
+    /Reflect/i,
+    /Proxy/i,
+    /Object/i,
+    /\bthis\b/i,
+    /Array/i,
+    /Error/i,
+    /String/i,
+    /Number/i,
+    /Boolean/i,
+    /RegExp/i,
+    /Math/i,
+    /JSON/i,
+    /\[\s*['"`\\]/
+  ]
+
+  for (const pattern of forbiddenPatterns) {
+    if (pattern.test(code)) {
+      return false
+    }
+  }
+  return true
+}
 
 function favicon () {
   return utils.extractFilename(config.get('application.favicon'))
@@ -58,7 +116,10 @@ export function getUserProfile () {
         if (!code) {
           throw new Error('Username is null')
         }
-        username = eval(code) // eslint-disable-line no-eval
+        if (!isSafeCode(code)) {
+          throw new Error('Unsafe code execution blocked')
+        }
+        username = safeEval(code)
       } catch (err) {
         username = '\\' + username
       }
